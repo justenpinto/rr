@@ -11,6 +11,6 @@ class User:
     @classmethod
     def create_user_regular(self, username, password):
         with CursorFromConnectionFromPool() as cursor:
-            cursor.execute('INSERT INTO users (username, password)'
-                           'VALUES (%s, crypt(%s, gen_salt(\'bf\', 8)'
+            cursor.execute('SELECT create_user_regular'
+                           '(%s, crypt(%s, gen_salt(\'bf\', 8)))'
                            (username, password))
