@@ -53,21 +53,103 @@ end;
 $user_id$ language plpgsql;
 
 drop function if exists load_recruiter(int);
-create or replace function load_recruiter(recruiter_id int)
-returns setof recruiters as $$
+create or replace function load_recruiter(r_id int)
+returns table (id int, first_name text, last_name text, email text, phone_number text, rating numeric(3,2)) as $$
 begin
-	return query(select * from recruiters where id = recruiter_id);
+	return query(
+	    select r.id, r.first_name, r.last_name, r.email, r.phone_number, rr.rating from recruiters r
+        inner join (
+            select recruiter_id, round(avg(urr.rating), 2) as rating from user_recruiter_ratings urr
+            group by recruiter_id
+            having recruiter_id = r_id
+        ) rr on rr.recruiter_id = r.id
+    );
 end;
 $$ language plpgsql;
 
 drop function if exists load_agency(int);
-create or replace function load_agency(agency_id int)
-returns setof agencies as $$
+create or replace function load_agency(a_id int)
+returns table (id int, agency_name text, website text, address text, phone_number text, rating numeric(3,2)) as $$
 begin
-    return query(select * from agencies where id = agency_id);
+	return query(
+        select a.id, a.agency_name, a.website, a.address, a.phone_number, ra.rating from agencies a
+        inner join (
+            select agency_id, round(avg(uar.rating), 2) as rating from user_agency_ratings uar
+            group by agency_id
+            having agency_id = a_id
+        ) ra on ra.agency_id = a.id
+    );
 end;
 $$ language plpgsql;
 
+drop function if exists search_recruiters(text, text);
+create or replace function search_recruiters(fname text, lname text)
+returns table (id int, first_name text, last_name text, email text, phone_number text, rating numeric(3,2)) as $$
+begin
+    return query (
+        select r.id, r.first_name, r.last_name, r.email, r.phone_number, rr.rating from recruiters r
+        inner join (
+            select recruiter_id, round(avg(urr.rating), 2) as rating from user_recruiter_ratings urr
+            group by recruiter_id
+        ) rr on rr.recruiter_id = r.id
+        where lower(r.first_name) like lower(('%' || fname || '%'))
+        and lower(r.last_name) like lower(('%' || lname || '%'))
+    );
+end;
+$$ language plpgsql;
+
+drop function if exists search_agencies(text);
+create or replace function search_agencies(aname text)
+returns table (id int, agency_name text, website text, address text, rating numeric(3,2)) as $$
+begin
+    return query (
+        select a.id, a.agency_name, a.website, a.address, ar.rating from agencies a
+        inner join (
+            select agency_id, round(avg(uar.rating), 2) as rating from user_agency_ratings uar
+            group by agency_id
+        ) ar on ar.agency_id = a.id
+        where lower(a.agency_name) like lower(('%' || aname || '%'))
+    );
+end;
+$$ language plpgsql;
+
+drop function if exists find_recruiters_associated_with_agency(int);
+create or replace function find_recruiters_associated_with_agency(a_id int)
+returns table (id int, first_name text, last_name text, email text, phone_number text, rating numeric(3,2)) as $$
+begin
+    return query (
+        select r.id, r.first_name, r.last_name, r.email, r.phone_number, rr.rating
+        from recruiters r
+        inner join (
+	        select recruiter_id, round(avg(urr.rating), 2) as rating
+            from user_recruiter_ratings urr
+            group by recruiter_id
+        ) rr on r.id = rr.recruiter_id
+        inner join agency_recruiter_associations ara
+        on r.id = ara.recruiter_id
+        where agency_id = a_id
+    );
+end;
+$$ language plpgsql;
+
+drop function if exists find_agencies_associated_with_recruiter(int);
+create or replace function find_agencies_associated_with_recruiter(r_id int)
+returns table (id int, agency_name text, website text, address text, phone_number text, rating numeric(3,2)) as $$
+begin
+    return query (
+        select a.id, a.agency_name, a.website, a.address, a.phone_number, ar.rating
+        from agencies a
+        inner join (
+            select agency_id, round(avg(uar.rating), 2) as rating
+            from user_agency_ratings uar
+            group by agency_id
+        ) ar on a.id = ar.agency_id
+        inner join agency_recruiter_associations ara
+        on a.id = ara.agency_id
+        where recruiter_id = r_id
+    );
+end;
+$$ language plpgsql;
 
 -- Rate Functions
 drop function if exists rate_recruiter(int, int, numeric(3,2), text, boolean);
